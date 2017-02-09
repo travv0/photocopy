@@ -14,7 +14,12 @@
   "Hash table to hold general settings from ini file.")
 
 (defun -main (&optional args)
-  (format t "~a~%" "I don't do much yet"))
+  (let ((ini (parse (normalize-line-endings
+                     (read-ini-to-string "test.ini"))
+                    'list))
+        (badge-number (second args)))
+    (ini-section-to-directories (get-ini-section ini "VIEW-PATHS") *paths*)
+    (ini-section-to-hash-table (get-ini-section ini "GENERAL") *general-settings*)))
 
 (defun read-ini-to-string (file-path)
   "Read INI file at `file-path' to a string."
