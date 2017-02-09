@@ -22,7 +22,7 @@
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *general-settings*)))
 
 (defmethod print-object ((object hash-table) stream)
-  (format stream "#HASH{~{~{(~s : ~s)~}~^ ~}}"
+  (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
           (loop for key being the hash-keys of object
                   using (hash-value value)
                 collect (list key value))))
