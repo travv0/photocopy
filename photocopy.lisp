@@ -1,6 +1,6 @@
 (defpackage :photocopy
   (:use :cl
-        :cl-fad
+        :uiop/pathname
         :parser.ini
         :trivial-types)
   (:use :photocopy.app-utils)
@@ -74,15 +74,15 @@ stored as pathname directories."
                                                             paths-table)
             using (hash-value path)
         do (setf (gethash badge-number paths-table)
-                 (pathname-as-directory path)))
+                 (ensure-directory-pathname path)))
   paths-table)
 
 (defun copy-files (from to)
   "Copy all files from `from' to `to'."
   (declare ((or pathname string) from)
            ((or pathname string) to))
-  (let ((from (pathname-as-directory from))
-        (to (pathname-as-directory to)))
+  (let ((from (ensure-directory-pathname from))
+        (to (ensure-directory-pathname to)))
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
