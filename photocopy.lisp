@@ -52,3 +52,20 @@ that was returned by `get-ini-section'."
                   (path (pathname-as-directory (getf path-entry-plist :value))))
              (setf (gethash badge-number paths-table) path))
         return (the hash-table paths-table)))
+
+(defun copy-files (from to)
+  "Copy all files from `from' to `to'."
+  (declare ((or pathname string) from)
+           ((or pathname string) to))
+  (let ((from (pathname-as-directory from))
+        (to (pathname-as-directory to)))
+    (ensure-directories-exist to)
+    (walk-directory from
+                    (lambda (file)
+                      (copy-file file
+                                 (merge-pathnames-as-file
+                                  to
+                                  (format nil "~a~@[.~a~]"
+                                          (pathname-name file)
+                                          (pathname-type file)))
+                                 :overwrite t)))))
