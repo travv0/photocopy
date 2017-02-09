@@ -10,6 +10,8 @@
 
 (defvar *paths* (make-hash-table :test 'equal)
   "Hash table of paths to save files to by badge number.")
+(defvar *general-settings* (make-hash-table :test 'equal)
+  "Hash table to hold general settings from ini file.")
 
 (defun -main (&optional args)
   (format t "~a~%" "I don't do much yet"))
@@ -41,25 +43,28 @@ with `section-name'."
                       (getf (getf section :section)
                             :section-option))))
 
-(defun get-setting-value (section key)
-  "Get value by `key' from ini `section'."
-  (declare ((proper-list (proper-list property-list)))
-           (string key))
+(defun ini-section-to-hash-table (section table)
+  "Populate `settings-table' hash table with keys and values from section."
+  (declare ((proper-list (proper-list property-list)) section))
   (loop for setting in section
-        when (equal (getf (first setting) :name) (list key))
-          return (getf (first setting) :value)))
+        do (let* ((setting-plist (first setting))
+                  (key (first (getf setting-plist :name)))
+                  (value (getf setting-plist :value)))
+             (setf (gethash key table) value)))
+  table)
 
-(defun populate-paths (paths-table paths-section)
-  "Populate `paths-table' hash-table with path info in `paths-section'
-that was returned by `get-ini-section'."
+(defun ini-section-to-directories (paths-section paths-table)
+  "The same as `ini-section-to-hash-table', but ensures all values are
+stored as pathname directories."
   (declare (hash-table paths-table)
            ((proper-list (proper-list property-list)) paths-section))
-  (loop for path-entry in paths-section
-        do (let* ((path-entry-plist (first path-entry))
-                  (badge-number (first (getf path-entry-plist :name)))
-                  (path (pathname-as-directory (getf path-entry-plist :value))))
-             (setf (gethash badge-number paths-table) path))
-        return (the hash-table paths-table)))
+  (loop for badge-number
+          being the hash-keys of (ini-section-to-hash-table paths-section
+                                                            paths-table)
+            using (hash-value path)
+        do (setf (gethash badge-number paths-table)
+                 (pathname-as-directory path)))
+  paths-table)
 
 (defun copy-files (from to)
   "Copy all files from `from' to `to'."
