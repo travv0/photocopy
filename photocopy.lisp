@@ -41,6 +41,14 @@ with `section-name'."
                       (getf (getf section :section)
                             :section-option))))
 
+(defun get-setting-value (section key)
+  "Get value by `key' from ini `section'."
+  (declare ((proper-list (proper-list property-list)))
+           (string key))
+  (loop for setting in section
+        when (equal (getf (first setting) :name) (list key))
+          return (getf (first setting) :value)))
+
 (defun populate-paths (paths-table paths-section)
   "Populate `paths-table' hash-table with path info in `paths-section'
 that was returned by `get-ini-section'."
