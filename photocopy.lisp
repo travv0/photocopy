@@ -8,7 +8,8 @@
 
 (in-package :photocopy)
 
-(defvar *paths* (make-hash-table :test 'equal))
+(defvar *paths* (make-hash-table :test 'equal)
+  "Hash table of paths to save files to by badge number.")
 
 (defun -main (&optional args)
   (format t "~a~%" "I don't do much yet"))
