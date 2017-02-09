@@ -21,6 +21,12 @@
     (ini-section-to-directories (get-ini-section ini "VIEW-PATHS") *paths*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *general-settings*)))
 
+(defmethod print-object ((object hash-table) stream)
+  (format stream "#HASH{~{~{(~s : ~s)~}~^ ~}}"
+          (loop for key being the hash-keys of object
+                  using (hash-value value)
+                collect (list key value))))
+
 (defun read-ini-to-string (file-path)
   "Read INI file at `file-path' to a string."
   (declare ((or pathname string) file-path))
