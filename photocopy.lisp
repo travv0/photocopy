@@ -10,7 +10,7 @@
 
 (defvar *paths* (make-hash-table :test 'equal)
   "Hash table of paths to save files to by badge number.")
-(defvar *general-settings* (make-hash-table :test 'equal)
+(defvar *settings* (make-hash-table :test 'equal)
   "Hash table to hold general settings from ini file.")
 
 (defun -main (&optional args)
@@ -19,7 +19,7 @@
                     'list))
         (badge-number (second args)))
     (ini-section-to-directories (get-ini-section ini "VIEW-PATHS") *paths*)
-    (ini-section-to-hash-table (get-ini-section ini "GENERAL") *general-settings*)))
+    (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
