@@ -191,5 +191,5 @@ from it to the necessary places."
          full-vault-path
          "vault")
         (copy-files full-vault-path full-viewable-path "viewable location")
-        (format t "Files copied successfully, please remove USB and then press Enter.~%")
+        (format t "Files copied successfully, please remove USB and press Enter.~%")
         (read-line)))))
