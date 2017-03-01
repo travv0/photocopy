@@ -276,15 +276,20 @@ from it to the necessary places."
                                         (getf device :badge-number))))
         (unless (try-copy #'copy-files-from-device
                           (getf device :drive-letter)
-                          full-vault-path
-                          "vault")
-          (return-from import-from-usb))
-        (unless (try-copy #'copy-files
-                          full-vault-path
                           full-viewable-path
                           "viewable location")
           (return-from import-from-usb))
-        (format t "Files copied successfully, please remove USB and press Enter.~%")
+        (unless (try-copy #'copy-files
+                          full-viewable-path
+                          full-vault-path
+                          "vault")
+          (return-from import-from-usb))
+        (format t "Files copied successfully, removing from USB...~%")
+        (cl-fad:walk-directory
+         (format nil "~a/" (getf device :drive-letter))
+         (lambda (file)
+           (uiop/filesystem:delete-file-if-exists file)))
+        (format t "Complete, please remove USB and press Enter.~%")
         (read-line)
         (format t *waiting-message*)))))
 
@@ -320,6 +325,8 @@ from it to the necessary places."
 
 (defun files-equivalent-p (file1 file2)
   "Compare `file1' and `file2', returning T if they're the same."
+  (declare ((or string pathname) file1)
+           ((or string pathname) file2))
   (with-open-file (input-stream1 file1
                                  :direction :input
                                  :element-type '(unsigned-byte 8))
