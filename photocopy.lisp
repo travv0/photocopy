@@ -97,7 +97,7 @@ with `section-name'."
   (let ((command-results (with-output-to-string (s)
                            (sb-ext:run-program
                             "wmic"
-                            '("logicaldisk" "get" "volumeserialnumber,caption")
+                            '("logicaldisk" "get" "caption,volumeserialnumber")
                             :search t
                             :output s))))
     (rest (rest (cl-utilities:split-sequence-if
@@ -112,9 +112,11 @@ with `section-name'."
           return value))
 
 (defun check-serial-numbers (serial-number-list serial-number-table)
-  "Checks serial numbers in `serial-number-list' and returns the drive letter
-of the first one that's found in `serial-number-table'."
+  "Checks serial numbers in `serial-number-list' and returns the badge number
+and drive letter of the first one that's found in `serial-number-table'."
   (loop for drive-letter in serial-number-list by #'cddr
         for serial-number in (rest serial-number-list) by #'cddr
-        when (nth-value 1 (gethash serial-number serial-number-table))
-          return drive-letter))
+        do (when (nth-value 1 (gethash serial-number serial-number-table))
+             (return (list :badge-number (gethash serial-number
+                                                  serial-number-table)
+                           :drive-letter drive-letter))))))
