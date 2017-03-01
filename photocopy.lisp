@@ -57,7 +57,7 @@
            (bt:with-lock-held
                (*lock*)
              (format t "Deleting files older than ~d days old from viewable directory...~%"
-                       expiration-days)
+                     expiration-days)
              (clean-old-files expiration-days
                               (gethash "viewable" *settings*)))
            (sleep clean-frequency)))
