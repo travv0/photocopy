@@ -280,7 +280,7 @@ and drive letter of the first one that's found in `serial-number-table'."
                (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Please remove USB and hold for further review.  Press Enter after USB has been removed.~%"
                        location-description
                        bad-results)
-               (read-line)
+               (ignore-errors (read-line))
                (format t *waiting-message*)
                (return nil))
         when bad-results
@@ -325,7 +325,7 @@ from it to the necessary places."
          (lambda (file)
            (uiop/filesystem:delete-file-if-exists file)))
         (format t "Complete, please remove USB and press Enter.~%")
-        (read-line)
+        (ignore-errors (read-line))
         (format t *waiting-message*)))))
 
 (defun clean-old-files (expiration-days directory)

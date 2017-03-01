@@ -4,7 +4,7 @@
   (:export :internal-quit))
 
 (in-package :photocopy.app-utils)
-  
+
 (defun internal-disable-debugger ()
   (labels
       ((internal-exit (c h)
@@ -35,4 +35,4 @@
   #-(or allegro clisp cmu cormanlisp gcl lispworks lucid sbcl
         kcl scl openmcl mcl abcl ecl)
 
-  (error 'not-implemented :proc (list 'quit code))) 
+  (error 'not-implemented :proc (list 'quit code)))
