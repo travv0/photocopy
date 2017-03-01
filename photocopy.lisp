@@ -2,7 +2,8 @@
   (:use :cl
         :uiop/pathname
         :parser.ini
-        :trivial-types)
+        :trivial-types
+        :cl-utilities)
   (:use :photocopy.app-utils)
   (:export :-main))
 
@@ -93,3 +94,26 @@ stored as pathname directories."
                                           (pathname-name file)
                                           (pathname-type file)))
                                  :overwrite t)))))
+
+(defconstant +whitespace-chars+ '(#\Space #\Newline #\Backspace #\Tab
+                                  #\Linefeed #\Page #\Return #\Rubout))
+
+(defun whitespacep (character)
+  "Check if `character' is whitespace."
+  (not (not (position character +whitespace-chars+))))
+
+(defun trim-whitespace (string)
+  (string-trim +whitespace-chars+ string))
+
+(defun retrieve-current-serial-numbers ()
+  "Retrieve serial numbers of devices currently plugged in."
+  (let ((command-results (with-output-to-string (s)
+                           (sb-ext:run-program
+                            "wmic"
+                            '("diskdrive" "get" "serialnumber")
+                            :search t
+                            :output s))))
+    (rest (cl-utilities:split-sequence-if
+           #'whitespacep
+           (trim-whitespace command-results)
+           :remove-empty-subseqs t))))

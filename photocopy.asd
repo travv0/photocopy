@@ -6,7 +6,8 @@
   :license "Modified BSD License"
   :serial t
   :depends-on (:parser.ini
-               :trivial-types)
+               :trivial-types
+               :cl-utilities)
   :pathname "./"
   :components ((:file "app-utils")
                (:file "photocopy")))
