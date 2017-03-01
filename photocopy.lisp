@@ -125,9 +125,11 @@ with `section-name'."
   "Copy all files from `from' to `to'."
   (declare ((or pathname string) from)
            ((or pathname string) to))
-  (let ((from (uiop/pathname:ensure-directory-pathname from))
-        (to (uiop/pathname:ensure-directory-pathname to))
-        (failed ()))
+  (let* ((from (uiop/pathname:ensure-directory-pathname from))
+         (to (uiop/pathname:ensure-directory-pathname to))
+         (total-files (file-count from skip-if-exists to))
+         (current-file-count 1)
+         (failed ()))
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
@@ -136,11 +138,13 @@ with `section-name'."
                                        (file-namestring file))))
                         (unless (and skip-if-exists
                                      (file-exists-p new-file))
+                          (format t "[~d/~d] " current-file-count total-files)
                           (unless (copy-file-with-progress
                                    file
                                    new-file
                                    location-description)
-                            (setf failed (cons file failed)))))))
+                            (setf failed (cons file failed)))
+                          (incf current-file-count)))))
     (if failed
         (values nil failed)
         t)))
@@ -184,8 +188,29 @@ with `section-name'."
                                       (- *progress-bar-length* progress-bar-size)
                                       "=")))
               (format t "~%"))))
-        (files-equivalent-p from to))
+        (format t "Verifying copy...~%")
+        (when (files-equivalent-p from to)
+          (format t " OK~%")
+          (return-from copy-file-with-progress t))
+        (format t "~%"))
     (error (c) (format t "Copying file from ~s to ~s failed: ~a~%" from to c))))
+
+(defun file-count (directory &optional skip-if-exists dest-directory)
+  "Get number of files in a `directory' (recursively)."
+  (declare ((or string pathname) directory)
+           (boolean skip-if-exists))
+  (when (and skip-if-exists (not dest-directory))
+    (error "dest-directory must be provided if skip-if-exists is provided."))
+  (let ((counter 0))
+    (walk-directory (format nil "~a/" directory)
+                    (lambda (file)
+                      (declare (ignorable file))
+                      (unless (and skip-if-exists
+                                   (probe-file (merge-pathnames-as-file
+                                                (uiop/pathname:ensure-directory-pathname dest-directory)
+                                                (file-namestring file))))
+                        (incf counter))))
+    counter))
 
 (defvar *whitespace-chars* '(#\Space #\Newline #\Backspace #\Tab
                              #\Linefeed #\Page #\Return #\Rubout))
@@ -260,9 +285,7 @@ and drive letter of the first one that's found in `serial-number-table'."
                (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Trying again...~%"
                        location-description
                        bad-results)
-               (incf i)
-               ;; overwrite files if it fails once
-               (setf skip-if-exists nil))))
+               (incf i))))
 
 (defun import-from-usb (device-ids vault-path viewable-path)
   "Check USBs for relavant ones, and if one is found, copy the files
@@ -342,17 +365,33 @@ from it to the necessary places."
     (with-open-file (input-stream2 file2
                                    :direction :input
                                    :element-type '(unsigned-byte 8))
-      (let ((file-length1 (file-length input-stream1))
-            (file-length2 (file-length input-stream2)))
+      (let* ((buf-size 4096)
+             (buf1 (make-array buf-size :element-type (stream-element-type input-stream1)))
+             (buf2 (make-array buf-size :element-type (stream-element-type input-stream2)))
+             (file-length1 (file-length input-stream1))
+             (file-length2 (file-length input-stream2)))
         (when (and file-length1
                    file-length2
                    (= file-length1 file-length2))
-          (loop for byte1 = (read-byte input-stream1 nil -1)
-                for byte2 = (read-byte input-stream2 nil -1)
-                when (or (not (integerp byte1))
-                         (not (integerp byte2))
-                         (/= byte1 byte2))
+          (loop for pos1 = (read-sequence buf1 input-stream1)
+                for pos2 = (read-sequence buf2 input-stream2)
+                with progress = 0
+                with progress-bar-size = 0
+                when (not (equalp buf1 buf2))
                   return nil
-                when (and (integerp byte1)
-                          (= byte1 -1))
-                  return t))))))
+                when (not (plusp pos1))
+                  do (progn
+                       (when (< progress-bar-size *progress-bar-length*)
+                         (format t
+                                 "~v@{~A~:*~}"
+                                 (- *progress-bar-length* progress-bar-size)
+                                 "="))
+                       (return t))
+                do (progn
+                     (incf progress buf-size)
+                     (when (> (floor (* *progress-bar-length*
+                                        (/ progress file-length1)))
+                              progress-bar-size)
+                       (format t "=")
+                       (finish-output)
+                       (incf progress-bar-size)))))))))
