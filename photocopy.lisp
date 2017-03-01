@@ -194,7 +194,8 @@ with `section-name'."
                    (return-from copy-file-with-progress t))
             (uiop/filesystem:delete-file-if-exists to))
         (format t "~%"))
-    (error (c) (format t "Copying file from ~s to ~s failed: ~a~%" from to c))))
+    (error (c) (progn (format t "Copying file from ~s to ~s failed: ~a~%" from to c)
+                      (uiop/filesystem:delete-file-if-exists to)))))
 
 (defun file-count (directory &optional skip-if-exists dest-directory)
   "Get number of files in a `directory' (recursively)."
