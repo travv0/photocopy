@@ -20,6 +20,11 @@
 (defparameter *waiting-message* "Waiting for USB device...~%"
   "Message to show when waiting for a USB to be inserted.")
 
+(defparameter *default-expiration-days* 14
+  "Default value for expiration days when not provided in INI or if invalid.")
+(defparameter *default-check-frequency* 5
+  "Default value for check frequency when not provided in INI or if invalid.")
+
 (defun -main (&optional args)
   (let ((ini (parse (normalize-line-endings
                      (read-ini-to-string (or (second args) "config.ini")))
@@ -34,9 +39,12 @@
       (clean-old-files (or (parse-integer
                             (gethash "expirationDays" *settings*)
                             :junk-allowed t)
-                           14)
+                           *default-expiration-days*)
                        (gethash "viewable" *settings*))
-      (sleep 5))))
+      (sleep (or (parse-integer
+                  (gethash "checkFrequency" *settings*)
+                  :junk-allowed t)
+                 *default-check-frequency*)))))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
@@ -232,6 +240,6 @@ from it to the necessary places."
      days))
 
 (defun seconds->days (seconds)
-  "Convert seconds to days."
+  "Convert `seconds' to days."
   (declare (integer seconds))
   (/ seconds 60 60 24))
