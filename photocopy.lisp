@@ -261,7 +261,7 @@ from it to the necessary places."
          (uiop/filesystem:delete-file-if-exists file))))
     (if old-files-found
         (format t "Deleted the following files that were older than ~d days:~%~{~a~%~}~%"
-                expiration-days old-files-found)
+                expiration-days (reverse old-files-found))
         (format t "No files older than ~d days found.~%"
                 expiration-days))))
 
