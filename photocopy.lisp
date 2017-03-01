@@ -338,11 +338,17 @@ from it to the necessary places."
     (with-open-file (input-stream2 file2
                                    :direction :input
                                    :element-type '(unsigned-byte 8))
-      (when (= (file-length input-stream1)
-               (file-length input-stream2))
-        (loop for byte1 = (read-byte input-stream1 nil -1)
-              for byte2 = (read-byte input-stream2 nil -1)
-              when (/= byte1 byte2)
-                return nil
-              when (= byte1 -1)
-                return t)))))
+      (let ((file-length1 (file-length input-stream1))
+            (file-length2 (file-length input-stream2)))
+        (when (and file-length1
+                   file-length2
+                   (= file-length1 file-length2))
+          (loop for byte1 = (read-byte input-stream1 nil -1)
+                for byte2 = (read-byte input-stream2 nil -1)
+                when (or (not (integerp byte1))
+                         (not (integerp byte2))
+                         (/= byte1 byte2))
+                  return nil
+                when (and (integerp byte1)
+                          (= byte1 -1))
+                  return t))))))
