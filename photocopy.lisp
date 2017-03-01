@@ -21,9 +21,17 @@
   "Message to show when waiting for a USB to be inserted.")
 
 (defparameter *default-expiration-days* 14
-  "Default value for expiration days when not provided in INI or if invalid.")
+  "Default value for expiration days when not provided in INI or if invalid
+(in days).")
+(defparameter *default-clean-frequency* 3600
+  "Default value for clean frequency when not provided in INI or if invalid
+(in seconds).")
 (defparameter *default-check-frequency* 5
-  "Default value for check frequency when not provided in INI or if invalid.")
+  "Default value for check frequency when not provided in INI or if invalid
+(in seconds).")
+
+(defvar *lock* (bt:make-lock)
+  "Lock for threads")
 
 (defun -main (&optional args)
   (let ((ini (parse (normalize-line-endings
@@ -34,12 +42,35 @@
     (let ((check-frequency (or (parse-integer
                                 (gethash "checkFrequency" *settings*)
                                 :junk-allowed t)
-                               *default-check-frequency*)))
-      (format t *waiting-message*)
+                               *default-check-frequency*))
+          (clean-frequency (or (parse-integer
+                                (gethash "cleanFrequency" *settings*)
+                                :junk-allowed t)
+                               *default-clean-frequency*))
+          (expiration-days (or (parse-integer
+                                (gethash "expirationDays" *settings*)
+                                :junk-allowed t)
+                               *default-expiration-days*)))
+      (bt:make-thread
+       (lambda ()
+         (loop
+           (bt:with-lock-held
+               (*lock*)
+             (format t "Deleting files older than ~d days old from viewable directory...~%"
+                       expiration-days)
+             (clean-old-files expiration-days
+                              (gethash "viewable" *settings*)))
+           (sleep clean-frequency)))
+       :name "clean-files")
+      (bt:with-lock-held
+          (*lock*)
+        (format t *waiting-message*))
       (loop
-        (import-from-usb *device-ids*
-                         (gethash "vault" *settings*)
-                         (gethash "viewable" *settings*))
+        (bt:with-lock-held
+            (*lock*)
+          (import-from-usb *device-ids*
+                           (gethash "vault" *settings*)
+                           (gethash "viewable" *settings*)))
         (sleep check-frequency)))))
 
 (defmethod print-object ((object hash-table) stream)
@@ -216,3 +247,33 @@ from it to the necessary places."
         (format t "Files copied successfully, please remove USB and press Enter.~%")
         (read-line)
         (format t *waiting-message*)))))
+
+(defun clean-old-files (expiration-days directory)
+  "Remove files from `directory' that haven't been modified in `expiration-days' days."
+  (declare (integer expiration-days)
+           ((or pathname string) directory))
+  (let ((old-files-found ()))
+    (walk-directory
+     (uiop/pathname:ensure-directory-pathname directory)
+     (lambda (file)
+       (when (file-older-than-days-p expiration-days file)
+         (setf old-files-found (cons file old-files-found))
+         (uiop/filesystem:delete-file-if-exists file))))
+    (if old-files-found
+        (format t "Deleted the following files that were older than ~d days:~%~{~a~%~}~%"
+                expiration-days old-files-found)
+        (format t "No files older than ~d days found.~%"
+                expiration-days))))
+
+(defun file-older-than-days-p (days file)
+  "Return true if `file' is more than `days' days old."
+  (declare (integer days)
+           ((or pathname string) file))
+  (> (seconds->days (- (get-universal-time)
+                       (file-write-date file)))
+     days))
+
+(defun seconds->days (seconds)
+  "Convert `seconds' to days."
+  (declare (integer seconds))
+  (/ seconds 60 60 24))

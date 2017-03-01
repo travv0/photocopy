@@ -9,6 +9,7 @@
                :trivial-types
                :alexandria
                :cl-utilities
+               :bordeaux-threads
                :cl-fad)
   :pathname "./"
   :components ((:file "app-utils")
