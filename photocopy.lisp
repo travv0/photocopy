@@ -30,6 +30,9 @@
   "Default value for check frequency when not provided in INI or if invalid
 (in seconds).")
 
+(defparameter *max-retry-count* 1
+  "Number of times to retry file copy, should it fail.")
+
 (defvar *lock* (bt:make-lock)
   "Lock for threads")
 
@@ -121,18 +124,23 @@ with `section-name'."
   (declare ((or pathname string) from)
            ((or pathname string) to))
   (let ((from (uiop/pathname:ensure-directory-pathname from))
-        (to (uiop/pathname:ensure-directory-pathname to)))
+        (to (uiop/pathname:ensure-directory-pathname to))
+        (failed ()))
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
-                      (copy-file-with-progress
-                       file
-                       (merge-pathnames-as-file
-                        to
-                        (format nil "~a~@[.~a~]"
-                                (pathname-name file)
-                                (pathname-type file)))
-                       location-description)))))
+                      (unless (copy-file-with-progress
+                               file
+                               (merge-pathnames-as-file
+                                to
+                                (format nil "~a~@[.~a~]"
+                                        (pathname-name file)
+                                        (pathname-type file)))
+                               location-description)
+                        (setf failed (cons file failed)))))
+    (if failed
+        (values nil failed)
+        t)))
 
 (defun copy-file-with-progress (from to &optional location-description)
   "Copy files from `from' to `to', hopefully with a nice progress bar."
@@ -171,7 +179,8 @@ with `section-name'."
                                   "~v@{~A~:*~}"
                                   (- *progress-bar-length* progress-bar-size)
                                   "=")))
-          (format t "~%"))))))
+          (format t "~%")))))
+  (files-equivalent-p from to))
 
 (defvar *whitespace-chars* '(#\Space #\Newline #\Backspace #\Tab
                              #\Linefeed #\Page #\Return #\Rubout))
@@ -239,11 +248,45 @@ from it to the necessary places."
             (full-viewable-path (format nil "~a/~a"
                                         viewable-path
                                         (getf device :badge-number))))
-        (copy-files-from-device
-         (getf device :drive-letter)
-         full-vault-path
-         "vault")
-        (copy-files full-vault-path full-viewable-path "viewable location")
+        (loop for bad-results = (nth-value 1 (copy-files-from-device
+                                              (getf device :drive-letter)
+                                              full-vault-path
+                                              "vault"))
+              with i = 0
+              unless bad-results
+                return t
+              when (and (>= i *max-retry-count*)
+                        bad-results)
+                do (progn
+                     (format t "Failed to copy following files to vault:~%~{~a~%~}~%Please remove USB and hold for furter review.  Press Enter after USB has been removed.~%"
+                             bad-results)
+                     (read-line)
+                     (format t *waiting-message*)
+                     (return-from import-from-usb))
+              when bad-results
+                do (progn
+                     (format t "Failed to copy following files to vault:~%~{~a~%~}~%Trying again...~%"
+                             bad-results)
+                     (incf i)))
+        (loop for bad-results = (nth-value 1 (copy-files full-vault-path
+                                                     full-viewable-path
+                                                     "viewable location"))
+              with i = 0
+              unless bad-results
+                return t
+              when (and (>= i *max-retry-count*)
+                        bad-results)
+                do (progn
+                     (format t "Failed to copy following files to viewable location:~%~{~a~%~}~%Please remove USB and hold for furter review.  Press Enter after USB has been removed.~%"
+                             bad-results)
+                     (read-line)
+                     (format t *waiting-message*)
+                     (return-from import-from-usb))
+              when bad-results
+                do (progn
+                     (format t "Failed to copy following files to viewable location:~%~{~a~%~}~%Trying again...~%"
+                             bad-results)
+                     (incf i)))
         (format t "Files copied successfully, please remove USB and press Enter.~%")
         (read-line)
         (format t *waiting-message*)))))
@@ -277,3 +320,20 @@ from it to the necessary places."
   "Convert `seconds' to days."
   (declare (integer seconds))
   (/ seconds 60 60 24))
+
+(defun files-equivalent-p (file1 file2)
+  "Compare `file1' and `file2', returning T if they're the same."
+  (with-open-file (input-stream1 file1
+                                 :direction :input
+                                 :element-type '(unsigned-byte 8))
+    (with-open-file (input-stream2 file2
+                                   :direction :input
+                                   :element-type '(unsigned-byte 8))
+      (when (= (file-length input-stream1)
+               (file-length input-stream2))
+        (loop for byte1 = (read-byte input-stream1 nil -1)
+              for byte2 = (read-byte input-stream2 nil -1)
+              when (/= byte1 byte2)
+                return nil
+              when (= byte1 -1)
+                return t)))))
