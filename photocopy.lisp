@@ -9,8 +9,8 @@
 
 (in-package :photocopy)
 
-(defvar *paths* (make-hash-table :test 'equal)
-  "Hash table of paths to save files to by badge number.")
+(defvar *device-ids* (make-hash-table :test 'equal)
+  "Hash table of badge numbers by device ID.")
 (defvar *settings* (make-hash-table :test 'equal)
   "Hash table to hold general settings from ini file.")
 
@@ -19,8 +19,8 @@
                      (read-ini-to-string "test.ini"))
                     'list))
         (badge-number (second args)))
-    (ini-section-to-directories (get-ini-section ini "VIEW-PATHS") *paths*)
-    (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)))
+    (values (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
+            (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*))))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
@@ -56,7 +56,7 @@ with `section-name'."
                             :section-option))))
 
 (defun ini-section-to-hash-table (section table)
-  "Populate `settings-table' hash table with keys and values from section."
+  "Populate `table' hash table with keys and values from `section'."
   (declare ((proper-list (proper-list property-list)) section))
   (loop for setting in section
         do (let* ((setting-plist (first setting))
@@ -64,19 +64,6 @@ with `section-name'."
                   (value (getf setting-plist :value)))
              (setf (gethash key table) value)))
   table)
-
-(defun ini-section-to-directories (paths-section paths-table)
-  "The same as `ini-section-to-hash-table', but ensures all values are
-stored as pathname directories."
-  (declare (hash-table paths-table)
-           ((proper-list (proper-list property-list)) paths-section))
-  (loop for badge-number
-          being the hash-keys of (ini-section-to-hash-table paths-section
-                                                            paths-table)
-            using (hash-value path)
-        do (setf (gethash badge-number paths-table)
-                 (ensure-directory-pathname path)))
-  paths-table)
 
 (defun copy-files (from to)
   "Copy all files from `from' to `to'."
@@ -95,25 +82,25 @@ stored as pathname directories."
                                           (pathname-type file)))
                                  :overwrite t)))))
 
-(defconstant +whitespace-chars+ '(#\Space #\Newline #\Backspace #\Tab
-                                  #\Linefeed #\Page #\Return #\Rubout))
+(defvar *whitespace-chars* '(#\Space #\Newline #\Backspace #\Tab
+                             #\Linefeed #\Page #\Return #\Rubout))
 
 (defun whitespacep (character)
   "Check if `character' is whitespace."
-  (not (not (position character +whitespace-chars+))))
+  (not (not (position character *whitespace-chars*))))
 
 (defun trim-whitespace (string)
-  (string-trim +whitespace-chars+ string))
+  (string-trim *whitespace-chars* string))
 
 (defun retrieve-current-serial-numbers ()
   "Retrieve serial numbers of devices currently plugged in."
   (let ((command-results (with-output-to-string (s)
                            (sb-ext:run-program
                             "wmic"
-                            '("diskdrive" "get" "serialnumber")
+                            '("logicaldisk" "get" "caption,volumeserialnumber")
                             :search t
                             :output s))))
-    (rest (cl-utilities:split-sequence-if
-           #'whitespacep
-           (trim-whitespace command-results)
-           :remove-empty-subseqs t))))
+    (rest (rest (cl-utilities:split-sequence-if
+                 #'whitespacep
+                 (trim-whitespace command-results)
+                 :remove-empty-subseqs t)))))
