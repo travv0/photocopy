@@ -14,8 +14,11 @@
 (defvar *settings* (make-hash-table :test 'equal)
   "Hash table to hold general settings from ini file.")
 
-(defvar *progress-bar-length* 50
-  "Length of progress bars for file transfer")
+(defparameter *progress-bar-length* 50
+  "Length of progress bars for file transfer.")
+
+(defparameter *waiting-message* "Waiting for USB device...~%"
+  "Message to show when waiting for a USB to be inserted.")
 
 (defun -main (&optional args)
   (let ((ini (parse (normalize-line-endings
@@ -23,9 +26,17 @@
                     'list)))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
-    (import-from-usb *device-ids*
-                     (gethash "vault" *settings*)
-                     (gethash "viewable" *settings*))))
+    (format t *waiting-message*)
+    (loop
+      (import-from-usb *device-ids*
+                       (gethash "vault" *settings*)
+                       (gethash "viewable" *settings*))
+      (clean-old-files (or (parse-integer
+                            (gethash "expirationDays" *settings*)
+                            :junk-allowed t)
+                           14)
+                       (gethash "viewable" *settings*))
+      (sleep 5))))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
@@ -90,6 +101,9 @@ with `section-name'."
 
 (defun copy-file-with-progress (from to &optional location-description)
   "Copy files from `from' to `to', hopefully with a nice progress bar."
+  (declare (pathname from)
+           (pathname to)
+           ((or string null) location-description))
   (let ((buf-size 4096))
     (with-open-file (input-stream from
                                   :direction :input
@@ -101,7 +115,7 @@ with `section-name'."
                                      :element-type '(unsigned-byte 8))
         (let ((buf (make-array buf-size :element-type (stream-element-type input-stream)))
               (total-bytes (file-length input-stream)))
-          (format t "Copying file ~a to ~a...~%"
+          (format t "Copying file ~a~@[ to ~a~]...~%"
                   (file-namestring from)
                   location-description)
           (loop for pos = (read-sequence buf input-stream)
@@ -129,9 +143,11 @@ with `section-name'."
 
 (defun whitespacep (character)
   "Check if `character' is whitespace."
+  (declare (character character))
   (not (not (position character *whitespace-chars*))))
 
 (defun trim-whitespace (string)
+  (declare (string string))
   (string-trim *whitespace-chars* string))
 
 (defun retrieve-current-serial-numbers ()
@@ -147,15 +163,11 @@ with `section-name'."
                  (trim-whitespace command-results)
                  :remove-empty-subseqs t)))))
 
-(defun equal-getf (plist indicator)
-  (loop for key in plist by #'cddr
-        for value in (rest plist) by #'cddr
-        when (equal key indicator)
-          return value))
-
 (defun check-serial-numbers (serial-number-list serial-number-table)
   "Checks serial numbers in `serial-number-list' and returns the badge number
 and drive letter of the first one that's found in `serial-number-table'."
+  (declare ((proper-list string) serial-number-list)
+           (hash-table serial-number-table))
   (loop for drive-letter in serial-number-list by #'cddr
         for serial-number in (rest serial-number-list) by #'cddr
         do (when (nth-value 1 (gethash serial-number serial-number-table))
@@ -165,6 +177,9 @@ and drive letter of the first one that's found in `serial-number-table'."
 
 (defun copy-files-from-device (drive-letter destination &optional location-description)
   "Copy all files from `drive-letter' to `destination'."
+  (declare ((or string pathname) drive-letter)
+           ((or string pathname) destination)
+           ((or string null) location-description))
   (let ((destination (uiop/pathname:ensure-directory-pathname destination)))
     (ensure-directories-exist destination)
     (copy-files (format nil "~a/"
@@ -175,6 +190,9 @@ and drive letter of the first one that's found in `serial-number-table'."
 (defun import-from-usb (device-ids vault-path viewable-path)
   "Check USBs for relavant ones, and if one is found, copy the files
 from it to the necessary places."
+  (declare (hash-table device-ids)
+           ((or string pathname) vault-path)
+           ((or string pathname) viewable-path))
   (let ((device (check-serial-numbers (retrieve-current-serial-numbers)
                                       device-ids))
         (vault-path (uiop/pathname:ensure-directory-pathname vault-path))
@@ -192,4 +210,28 @@ from it to the necessary places."
          "vault")
         (copy-files full-vault-path full-viewable-path "viewable location")
         (format t "Files copied successfully, please remove USB and press Enter.~%")
-        (read-line)))))
+        (read-line)
+        (format t *waiting-message*)))))
+
+(defun clean-old-files (expiration-days directory)
+  "Remove files from `directory' that haven't been modified in `expiration-days' days."
+  (declare (integer expiration-days)
+           ((or pathname string) directory))
+  (walk-directory
+   (uiop/pathname:ensure-directory-pathname directory)
+   (lambda (file)
+     (when (file-older-than-days-p expiration-days file)
+       (uiop/filesystem:delete-file-if-exists file)))))
+
+(defun file-older-than-days-p (days file)
+  "Return true if `file' is more than `days' days old."
+  (declare (integer days)
+           ((or pathname string) file))
+  (> (seconds->days (- (get-universal-time)
+                       (file-write-date file)))
+     days))
+
+(defun seconds->days (seconds)
+  "Convert seconds to days."
+  (declare (integer seconds))
+  (/ seconds 60 60 24))

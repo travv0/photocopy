@@ -7,6 +7,7 @@
   :serial t
   :depends-on (:parser.ini
                :trivial-types
+               :alexandria
                :cl-utilities
                :cl-fad)
   :pathname "./"
