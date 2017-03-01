@@ -3,7 +3,8 @@
         :uiop/pathname
         :parser.ini
         :trivial-types
-        :cl-utilities)
+        :cl-utilities
+        :cl-fad)
   (:use :photocopy.app-utils)
   (:export :-main))
 
@@ -13,6 +14,9 @@
   "Hash table of badge numbers by device ID.")
 (defvar *settings* (make-hash-table :test 'equal)
   "Hash table to hold general settings from ini file.")
+
+(defvar *progress-bar-length* 50
+  "Length of progress bars for file transfer")
 
 (defun -main (&optional args)
   (let ((ini (parse (normalize-line-endings
@@ -74,13 +78,46 @@ with `section-name'."
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
-                      (copy-file file
-                                 (merge-pathnames-as-file
-                                  to
-                                  (format nil "~a~@[.~a~]"
-                                          (pathname-name file)
-                                          (pathname-type file)))
-                                 :overwrite t)))))
+                      (copy-file-with-progress
+                       file
+                       (merge-pathnames-as-file
+                        to
+                        (format nil "~a~@[.~a~]"
+                                (pathname-name file)
+                                (pathname-type file))))))))
+
+(defun copy-file-with-progress (from to)
+  "Copy files from `from' to `to', hopefully with a nice progress bar."
+  (let ((buf-size 4096))
+    (with-open-file (input-stream from
+                                  :direction :input
+                                  :element-type '(unsigned-byte 8))
+      (with-open-file (output-stream to
+                                     :direction :output
+                                     :if-exists :supersede
+                                     :if-does-not-exist :create
+                                     :element-type '(unsigned-byte 8))
+        (let ((buf (make-array buf-size :element-type (stream-element-type input-stream)))
+              (total-bytes (file-length input-stream)))
+          (format t "Copying file ~a...~%" (file-namestring from))
+          (loop for pos = (read-sequence buf input-stream)
+                with progress = 0
+                with progress-bar-size = 0
+                while (plusp pos)
+                do (progn
+                     (incf progress pos)
+                     (when (> (floor (* *progress-bar-length*
+                                        (/ progress total-bytes)))
+                              progress-bar-size)
+                       (format t "=")
+                       (incf progress-bar-size))
+                     (write-sequence buf output-stream :end pos))
+                finally (when (< progress-bar-size *progress-bar-length*)
+                          (format t
+                                  "~v@{~A~:*~}"
+                                  (- *progress-bar-length* progress-bar-size)
+                                  "=")))
+          (format t "~%"))))))
 
 (defvar *whitespace-chars* '(#\Space #\Newline #\Backspace #\Tab
                              #\Linefeed #\Page #\Return #\Rubout))
@@ -119,4 +156,31 @@ and drive letter of the first one that's found in `serial-number-table'."
         do (when (nth-value 1 (gethash serial-number serial-number-table))
              (return (list :badge-number (gethash serial-number
                                                   serial-number-table)
-                           :drive-letter drive-letter))))))
+                           :drive-letter drive-letter)))))
+
+(defun copy-files-from-device (drive-letter destination)
+  "Copy all files from `drive-letter' to `destination'."
+  (let ((destination (uiop/pathname:ensure-directory-pathname destination)))
+    (ensure-directories-exist destination)
+    (copy-files (format nil "~a/"
+                        (uiop/pathname:ensure-directory-pathname drive-letter))
+                destination)))
+
+(defun import-from-usb (device-ids vault-path viewable-path)
+  "Check USBs for relavant ones, and if one is found, copy the files
+from it to the necessary places."
+  (let ((device (check-serial-numbers (retrieve-current-serial-numbers)
+                                      device-ids))
+        (vault-path (uiop/pathname:ensure-directory-pathname vault-path))
+        (viewable-path (uiop/pathname:ensure-directory-pathname viewable-path)))
+    (when device
+      (let ((full-vault-path (format nil "~a/~a"
+                                     vault-path
+                                     (getf device :badge-number)))
+            (full-viewable-path (format nil "~a/~a"
+                                        viewable-path
+                                        (getf device :badge-number))))
+        (copy-files-from-device
+         (getf device :drive-letter)
+         full-vault-path)
+        (copy-files full-vault-path full-viewable-path)))))

@@ -7,7 +7,8 @@
   :serial t
   :depends-on (:parser.ini
                :trivial-types
-               :cl-utilities)
+               :cl-utilities
+               :cl-fad)
   :pathname "./"
   :components ((:file "app-utils")
                (:file "photocopy")))
