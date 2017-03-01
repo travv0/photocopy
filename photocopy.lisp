@@ -127,6 +127,7 @@ with `section-name'."
            ((or pathname string) to))
   (let* ((from (uiop/pathname:ensure-directory-pathname from))
          (to (uiop/pathname:ensure-directory-pathname to))
+         (total-file-count (file-count from skip-if-exists to))
          (current-file-count 1)
          (failed ()))
     (ensure-directories-exist to)
@@ -139,7 +140,7 @@ with `section-name'."
                                      (file-exists-p new-file))
                           (format t "[~d/~d] "
                                   current-file-count
-                                  (file-count from skip-if-exists to))
+                                  total-file-count)
                           (unless (copy-file-with-progress
                                    file
                                    new-file
