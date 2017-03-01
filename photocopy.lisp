@@ -61,7 +61,7 @@
          (loop
            (bt:with-lock-held
                (*lock*)
-             (format t "Deleting files older than ~d days old from viewable directory...~%"
+             (format t "Deleting files more than ~d days old from viewable directory...~%"
                      expiration-days)
              (clean-old-files expiration-days
                               (gethash "viewable" *settings*)))
@@ -150,40 +150,42 @@ with `section-name'."
   (declare (pathname from)
            (pathname to)
            ((or string null) location-description))
-  (let ((buf-size 4096))
-    (with-open-file (input-stream from
-                                  :direction :input
-                                  :element-type '(unsigned-byte 8))
-      (with-open-file (output-stream to
-                                     :direction :output
-                                     :if-exists :supersede
-                                     :if-does-not-exist :create
-                                     :element-type '(unsigned-byte 8))
-        (let ((buf (make-array buf-size :element-type (stream-element-type input-stream)))
-              (total-bytes (file-length input-stream)))
-          (format t "Copying file ~a~@[ to ~a~]...~%"
-                  (file-namestring from)
-                  location-description)
-          (loop for pos = (read-sequence buf input-stream)
-                with progress = 0
-                with progress-bar-size = 0
-                while (plusp pos)
-                do (progn
-                     (incf progress pos)
-                     (when (> (floor (* *progress-bar-length*
-                                        (/ progress total-bytes)))
-                              progress-bar-size)
-                       (format t "=")
-                       (finish-output)
-                       (incf progress-bar-size))
-                     (write-sequence buf output-stream :end pos))
-                finally (when (< progress-bar-size *progress-bar-length*)
-                          (format t
-                                  "~v@{~A~:*~}"
-                                  (- *progress-bar-length* progress-bar-size)
-                                  "=")))
-          (format t "~%")))))
-  (files-equivalent-p from to))
+  (handler-case
+      (let ((buf-size 4096))
+        (with-open-file (input-stream from
+                                      :direction :input
+                                      :element-type '(unsigned-byte 8))
+          (with-open-file (output-stream to
+                                         :direction :output
+                                         :if-exists :supersede
+                                         :if-does-not-exist :create
+                                         :element-type '(unsigned-byte 8))
+            (let ((buf (make-array buf-size :element-type (stream-element-type input-stream)))
+                  (total-bytes (file-length input-stream)))
+              (format t "Copying file ~a~@[ to ~a~]...~%"
+                      (file-namestring from)
+                      location-description)
+              (loop for pos = (read-sequence buf input-stream)
+                    with progress = 0
+                    with progress-bar-size = 0
+                    while (plusp pos)
+                    do (progn
+                         (incf progress pos)
+                         (when (> (floor (* *progress-bar-length*
+                                            (/ progress total-bytes)))
+                                  progress-bar-size)
+                           (format t "=")
+                           (finish-output)
+                           (incf progress-bar-size))
+                         (write-sequence buf output-stream :end pos))
+                    finally (when (< progress-bar-size *progress-bar-length*)
+                              (format t
+                                      "~v@{~A~:*~}"
+                                      (- *progress-bar-length* progress-bar-size)
+                                      "=")))
+              (format t "~%"))))
+        (files-equivalent-p from to))
+    (error (c) (format t "Copying file from ~s to ~s failed: ~a~%" from to c))))
 
 (defvar *whitespace-chars* '(#\Space #\Newline #\Backspace #\Tab
                              #\Linefeed #\Page #\Return #\Rubout))
@@ -258,7 +260,9 @@ and drive letter of the first one that's found in `serial-number-table'."
                (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Trying again...~%"
                        location-description
                        bad-results)
-               (incf i))))
+               (incf i)
+               ;; overwrite files if it fails once
+               (setf skip-if-exists nil))))
 
 (defun import-from-usb (device-ids vault-path viewable-path)
   "Check USBs for relavant ones, and if one is found, copy the files
