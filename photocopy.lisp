@@ -1,6 +1,5 @@
 (defpackage :photocopy
   (:use :cl
-        :uiop/pathname
         :parser.ini
         :trivial-types
         :cl-utilities
@@ -20,11 +19,13 @@
 
 (defun -main (&optional args)
   (let ((ini (parse (normalize-line-endings
-                     (read-ini-to-string "test.ini"))
-                    'list))
-        (badge-number (second args)))
-    (values (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
-            (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*))))
+                     (read-ini-to-string (or (second args) "config.ini")))
+                    'list)))
+    (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
+    (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
+    (import-from-usb *device-ids*
+                     (gethash "vault" *settings*)
+                     (gethash "viewable" *settings*))))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
@@ -69,12 +70,12 @@ with `section-name'."
              (setf (gethash key table) value)))
   table)
 
-(defun copy-files (from to)
+(defun copy-files (from to &optional location-description)
   "Copy all files from `from' to `to'."
   (declare ((or pathname string) from)
            ((or pathname string) to))
-  (let ((from (ensure-directory-pathname from))
-        (to (ensure-directory-pathname to)))
+  (let ((from (uiop/pathname:ensure-directory-pathname from))
+        (to (uiop/pathname:ensure-directory-pathname to)))
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
@@ -84,9 +85,10 @@ with `section-name'."
                         to
                         (format nil "~a~@[.~a~]"
                                 (pathname-name file)
-                                (pathname-type file))))))))
+                                (pathname-type file)))
+                       location-description)))))
 
-(defun copy-file-with-progress (from to)
+(defun copy-file-with-progress (from to &optional location-description)
   "Copy files from `from' to `to', hopefully with a nice progress bar."
   (let ((buf-size 4096))
     (with-open-file (input-stream from
@@ -99,7 +101,9 @@ with `section-name'."
                                      :element-type '(unsigned-byte 8))
         (let ((buf (make-array buf-size :element-type (stream-element-type input-stream)))
               (total-bytes (file-length input-stream)))
-          (format t "Copying file ~a...~%" (file-namestring from))
+          (format t "Copying file ~a to ~a...~%"
+                  (file-namestring from)
+                  location-description)
           (loop for pos = (read-sequence buf input-stream)
                 with progress = 0
                 with progress-bar-size = 0
@@ -110,6 +114,7 @@ with `section-name'."
                                         (/ progress total-bytes)))
                               progress-bar-size)
                        (format t "=")
+                       (finish-output)
                        (incf progress-bar-size))
                      (write-sequence buf output-stream :end pos))
                 finally (when (< progress-bar-size *progress-bar-length*)
@@ -158,13 +163,14 @@ and drive letter of the first one that's found in `serial-number-table'."
                                                   serial-number-table)
                            :drive-letter drive-letter)))))
 
-(defun copy-files-from-device (drive-letter destination)
+(defun copy-files-from-device (drive-letter destination &optional location-description)
   "Copy all files from `drive-letter' to `destination'."
   (let ((destination (uiop/pathname:ensure-directory-pathname destination)))
     (ensure-directories-exist destination)
     (copy-files (format nil "~a/"
                         (uiop/pathname:ensure-directory-pathname drive-letter))
-                destination)))
+                destination
+                location-description)))
 
 (defun import-from-usb (device-ids vault-path viewable-path)
   "Check USBs for relavant ones, and if one is found, copy the files
@@ -182,5 +188,8 @@ from it to the necessary places."
                                         (getf device :badge-number))))
         (copy-files-from-device
          (getf device :drive-letter)
-         full-vault-path)
-        (copy-files full-vault-path full-viewable-path)))))
+         full-vault-path
+         "vault")
+        (copy-files full-vault-path full-viewable-path "viewable location")
+        (format t "Files copied successfully, please remove USB and then press Enter.~%")
+        (read-line)))))
