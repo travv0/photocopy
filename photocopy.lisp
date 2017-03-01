@@ -121,7 +121,7 @@ with `section-name'."
              (setf (gethash key table) value)))
   table)
 
-(defun copy-files (from to &optional location-description)
+(defun copy-files (from to skip-if-exists &optional location-description)
   "Copy all files from `from' to `to'."
   (declare ((or pathname string) from)
            ((or pathname string) to))
@@ -131,15 +131,16 @@ with `section-name'."
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
-                      (unless (copy-file-with-progress
-                               file
-                               (merge-pathnames-as-file
-                                to
-                                (format nil "~a~@[.~a~]"
-                                        (pathname-name file)
-                                        (pathname-type file)))
-                               location-description)
-                        (setf failed (cons file failed)))))
+                      (let ((new-file (merge-pathnames-as-file
+                                       to
+                                       (file-namestring file))))
+                        (unless (and skip-if-exists
+                                     (file-exists-p new-file))
+                          (unless (copy-file-with-progress
+                                   file
+                                   new-file
+                                   location-description)
+                            (setf failed (cons file failed)))))))
     (if failed
         (values nil failed)
         t)))
@@ -221,7 +222,7 @@ and drive letter of the first one that's found in `serial-number-table'."
                                                   serial-number-table)
                            :drive-letter drive-letter)))))
 
-(defun copy-files-from-device (drive-letter destination &optional location-description)
+(defun copy-files-from-device (drive-letter destination skip-if-exists &optional location-description)
   "Copy all files from `drive-letter' to `destination'."
   (declare ((or string pathname) drive-letter)
            ((or string pathname) destination)
@@ -231,12 +232,14 @@ and drive letter of the first one that's found in `serial-number-table'."
     (copy-files (format nil "~a/"
                         (uiop/pathname:ensure-directory-pathname drive-letter))
                 destination
+                skip-if-exists
                 location-description)))
 
-(defun try-copy (copy-function from to &optional location-description)
+(defun try-copy (copy-function from to skip-if-exists &optional location-description)
   (loop for bad-results = (nth-value 1 (funcall copy-function
                                                 from
                                                 to
+                                                skip-if-exists
                                                 location-description))
         with i = 0
         unless bad-results
@@ -277,11 +280,13 @@ from it to the necessary places."
         (unless (try-copy #'copy-files-from-device
                           (getf device :drive-letter)
                           full-viewable-path
+                          nil
                           "viewable location")
           (return-from import-from-usb))
         (unless (try-copy #'copy-files
                           full-viewable-path
                           full-vault-path
+                          t
                           "vault")
           (return-from import-from-usb))
         (format t "Files copied successfully, removing from USB...~%")
