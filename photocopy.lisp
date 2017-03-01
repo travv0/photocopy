@@ -189,9 +189,10 @@ with `section-name'."
                                       "=")))
               (format t "~%"))))
         (format t "Verifying copy...~%")
-        (when (files-equivalent-p from to)
-          (format t " OK~%")
-          (return-from copy-file-with-progress t))
+        (if (files-equivalent-p from to)
+            (progn (format t " OK~%")
+                   (return-from copy-file-with-progress t))
+            (uiop/filesystem:delete-file-if-exists to))
         (format t "~%"))
     (error (c) (format t "Copying file from ~s to ~s failed: ~a~%" from to c))))
 
