@@ -42,6 +42,8 @@
                     'list)))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
+    (ensure-directories-exist (gethash "viewable" *settings*))
+    (ensure-directories-exist (gethash "vault" *settings*))
     (let ((check-frequency (or (parse-integer
                                 (gethash "checkFrequency" *settings*)
                                 :junk-allowed t)
@@ -125,7 +127,7 @@ with `section-name'."
            ((or pathname string) to))
   (let ((from (uiop/pathname:ensure-directory-pathname from))
         (to (uiop/pathname:ensure-directory-pathname to))
-        (failed '("~/test.txt")))
+        (failed ()))
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
@@ -232,7 +234,6 @@ and drive letter of the first one that's found in `serial-number-table'."
                 location-description)))
 
 (defun try-copy (copy-function from to &optional location-description)
-  (format t "~%~%~%AAAAAAA     ~a~%~%~%" *max-retry-count*)
   (loop for bad-results = (nth-value 1 (funcall copy-function
                                                 from
                                                 to
@@ -243,7 +244,7 @@ and drive letter of the first one that's found in `serial-number-table'."
         when (and (>= i *max-retry-count*)
                   bad-results)
           do (progn
-               (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Please remove USB and hold for furter review.  Press Enter after USB has been removed.~%"
+               (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Please remove USB and hold for further review.  Press Enter after USB has been removed.~%"
                        location-description
                        bad-results)
                (read-line)
