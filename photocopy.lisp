@@ -31,20 +31,16 @@
                     'list)))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
-    (format t *waiting-message*)
-    (loop
-      (import-from-usb *device-ids*
-                       (gethash "vault" *settings*)
-                       (gethash "viewable" *settings*))
-      (clean-old-files (or (parse-integer
-                            (gethash "expirationDays" *settings*)
-                            :junk-allowed t)
-                           *default-expiration-days*)
-                       (gethash "viewable" *settings*))
-      (sleep (or (parse-integer
-                  (gethash "checkFrequency" *settings*)
-                  :junk-allowed t)
-                 *default-check-frequency*)))))
+    (let ((check-frequency (or (parse-integer
+                                (gethash "checkFrequency" *settings*)
+                                :junk-allowed t)
+                               *default-check-frequency*)))
+      (format t *waiting-message*)
+      (loop
+        (import-from-usb *device-ids*
+                         (gethash "vault" *settings*)
+                         (gethash "viewable" *settings*))
+        (sleep check-frequency)))))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
@@ -220,26 +216,3 @@ from it to the necessary places."
         (format t "Files copied successfully, please remove USB and press Enter.~%")
         (read-line)
         (format t *waiting-message*)))))
-
-(defun clean-old-files (expiration-days directory)
-  "Remove files from `directory' that haven't been modified in `expiration-days' days."
-  (declare (integer expiration-days)
-           ((or pathname string) directory))
-  (walk-directory
-   (uiop/pathname:ensure-directory-pathname directory)
-   (lambda (file)
-     (when (file-older-than-days-p expiration-days file)
-       (uiop/filesystem:delete-file-if-exists file)))))
-
-(defun file-older-than-days-p (days file)
-  "Return true if `file' is more than `days' days old."
-  (declare (integer days)
-           ((or pathname string) file))
-  (> (seconds->days (- (get-universal-time)
-                       (file-write-date file)))
-     days))
-
-(defun seconds->days (seconds)
-  "Convert `seconds' to days."
-  (declare (integer seconds))
-  (/ seconds 60 60 24))
