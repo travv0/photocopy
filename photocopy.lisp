@@ -125,7 +125,7 @@ with `section-name'."
            ((or pathname string) to))
   (let ((from (uiop/pathname:ensure-directory-pathname from))
         (to (uiop/pathname:ensure-directory-pathname to))
-        (failed ()))
+        (failed '("~/test.txt")))
     (ensure-directories-exist to)
     (walk-directory from
                     (lambda (file)
@@ -231,6 +231,31 @@ and drive letter of the first one that's found in `serial-number-table'."
                 destination
                 location-description)))
 
+(defun try-copy (copy-function from to &optional location-description)
+  (format t "~%~%~%AAAAAAA     ~a~%~%~%" *max-retry-count*)
+  (loop for bad-results = (nth-value 1 (funcall copy-function
+                                                from
+                                                to
+                                                location-description))
+        with i = 0
+        unless bad-results
+          return t
+        when (and (>= i *max-retry-count*)
+                  bad-results)
+          do (progn
+               (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Please remove USB and hold for furter review.  Press Enter after USB has been removed.~%"
+                       location-description
+                       bad-results)
+               (read-line)
+               (format t *waiting-message*)
+               (return nil))
+        when bad-results
+          do (progn
+               (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Trying again...~%"
+                       location-description
+                       bad-results)
+               (incf i))))
+
 (defun import-from-usb (device-ids vault-path viewable-path)
   "Check USBs for relavant ones, and if one is found, copy the files
 from it to the necessary places."
@@ -248,45 +273,16 @@ from it to the necessary places."
             (full-viewable-path (format nil "~a/~a"
                                         viewable-path
                                         (getf device :badge-number))))
-        (loop for bad-results = (nth-value 1 (copy-files-from-device
-                                              (getf device :drive-letter)
-                                              full-vault-path
-                                              "vault"))
-              with i = 0
-              unless bad-results
-                return t
-              when (and (>= i *max-retry-count*)
-                        bad-results)
-                do (progn
-                     (format t "Failed to copy following files to vault:~%~{~a~%~}~%Please remove USB and hold for furter review.  Press Enter after USB has been removed.~%"
-                             bad-results)
-                     (read-line)
-                     (format t *waiting-message*)
-                     (return-from import-from-usb))
-              when bad-results
-                do (progn
-                     (format t "Failed to copy following files to vault:~%~{~a~%~}~%Trying again...~%"
-                             bad-results)
-                     (incf i)))
-        (loop for bad-results = (nth-value 1 (copy-files full-vault-path
-                                                     full-viewable-path
-                                                     "viewable location"))
-              with i = 0
-              unless bad-results
-                return t
-              when (and (>= i *max-retry-count*)
-                        bad-results)
-                do (progn
-                     (format t "Failed to copy following files to viewable location:~%~{~a~%~}~%Please remove USB and hold for furter review.  Press Enter after USB has been removed.~%"
-                             bad-results)
-                     (read-line)
-                     (format t *waiting-message*)
-                     (return-from import-from-usb))
-              when bad-results
-                do (progn
-                     (format t "Failed to copy following files to viewable location:~%~{~a~%~}~%Trying again...~%"
-                             bad-results)
-                     (incf i)))
+        (unless (try-copy #'copy-files-from-device
+                          (getf device :drive-letter)
+                          full-vault-path
+                          "vault")
+          (return-from import-from-usb))
+        (unless (try-copy #'copy-files
+                          full-vault-path
+                          full-viewable-path
+                          "viewable location")
+          (return-from import-from-usb))
         (format t "Files copied successfully, please remove USB and press Enter.~%")
         (read-line)
         (format t *waiting-message*)))))
