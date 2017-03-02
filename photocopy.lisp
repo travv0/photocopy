@@ -330,7 +330,7 @@ used for output."
                                            skip-if-exists
                                            location-description))))
     (cond (bad-results
-           (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Trying again...~%"
+           (format t "Failed to copy following files~@[ to ~a~]:~%~{~a~%~}~%Trying again...~%"
                    location-description
                    bad-results)
            (let ((bad-results (nth-value 1 (copy-files bad-results
@@ -338,7 +338,7 @@ used for output."
                                                        skip-if-exists
                                                        location-description))))
              (cond (bad-results
-                    (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}
+                    (format t "Failed to copy following files~@[ to ~a~]:~%~{~a~%~}
 Please remove USB and hold for further review.  Press Enter after USB has been removed.~%"
                             location-description
                             bad-results)
