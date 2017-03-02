@@ -17,7 +17,7 @@
 (defparameter *progress-bar-length* 50
   "Length of progress bars for file transfer.")
 
-(defparameter *waiting-message* "Waiting for USB device...~%"
+(defparameter *waiting-message* "Waiting for USB device...~%~%"
   "Message to show when waiting for a USB to be inserted.")
 
 (defparameter *default-expiration-days* 14
@@ -123,33 +123,61 @@ with `section-name'."
 
 (defun copy-files (from to skip-if-exists &optional location-description)
   "Copy all files from `from' to `to'."
-  (declare ((or pathname string) from)
+  (declare ((or pathname string (proper-list pathname)) from)
            ((or pathname string) to))
-  (let* ((from (uiop/pathname:ensure-directory-pathname from))
-         (to (uiop/pathname:ensure-directory-pathname to))
-         (total-file-count (file-count from skip-if-exists to))
-         (current-file-count 1)
-         (failed ()))
-    (ensure-directories-exist to)
-    (walk-directory from
-                    (lambda (file)
-                      (let ((new-file (merge-pathnames-as-file
-                                       to
-                                       (file-namestring file))))
-                        (unless (and skip-if-exists
-                                     (file-exists-p new-file))
-                          (format t "[~d/~d] "
-                                  current-file-count
-                                  total-file-count)
-                          (unless (copy-file-with-progress
-                                   file
-                                   new-file
-                                   location-description)
-                            (setf failed (cons file failed)))
-                          (incf current-file-count)))))
-    (if failed
-        (values nil failed)
-        t)))
+  (typecase from
+    ((or pathname string)
+     (let* ((from (uiop/pathname:ensure-directory-pathname from))
+            (to (uiop/pathname:ensure-directory-pathname to))
+            (total-file-count (file-count from skip-if-exists to))
+            (current-file-count 1)
+            (failed ()))
+       (ensure-directories-exist to)
+       (walk-directory from
+                       (lambda (file)
+                         (let ((new-file (merge-pathnames-as-file
+                                          to
+                                          (file-namestring file))))
+                           (unless (and skip-if-exists
+                                        (file-exists-p new-file))
+                             (format t "[~d/~d] "
+                                     current-file-count
+                                     total-file-count)
+                             (unless (copy-file-with-progress
+                                      file
+                                      new-file
+                                      location-description)
+                               (setf failed (cons file failed)))
+                             (incf current-file-count)))))
+       (if failed
+           (values nil failed)
+           t)))
+    ((proper-list pathname)
+     (let* ((to (uiop/pathname:ensure-directory-pathname to))
+            (total-file-count (length from))
+            (current-file-count 1)
+            (failed ()))
+       (ensure-directories-exist to)
+       (map nil
+            (lambda (file)
+              (let ((new-file (merge-pathnames-as-file
+                               to
+                               (file-namestring file))))
+                (unless (and skip-if-exists
+                             (file-exists-p new-file))
+                  (format t "[~d/~d] "
+                          current-file-count
+                          total-file-count)
+                  (unless (copy-file-with-progress
+                           file
+                           new-file
+                           location-description)
+                    (setf failed (cons file failed)))
+                  (incf current-file-count))))
+            from)
+       (if failed
+           (values nil failed)
+           t)))))
 
 (defun copy-file-with-progress (from to &optional location-description)
   "Copy files from `from' to `to', hopefully with a nice progress bar."
@@ -192,10 +220,11 @@ with `section-name'."
               (format t "~%"))))
         (format t "Verifying copy...~%")
         (if (files-equivalent-p from to)
-            (progn (format t " OK~%")
-                   (return-from copy-file-with-progress t))
-            (uiop/filesystem:delete-file-if-exists to))
-        (format t "~%"))
+            (progn (format t " OK~%~%")
+                   t)
+            (progn (format t " FAILED~%~%")
+                   (uiop/filesystem:delete-file-if-exists to)
+                   nil)))
     (error (c) (progn (format t "Copying file from ~s to ~s failed: ~a~%" from to c)
                       (uiop/filesystem:delete-file-if-exists to)))))
 
@@ -267,29 +296,28 @@ and drive letter of the first one that's found in `serial-number-table'."
                 location-description)))
 
 (defun try-copy (copy-function from to skip-if-exists &optional location-description)
-  (loop for bad-results = (nth-value 1 (funcall copy-function
-                                                from
-                                                to
-                                                skip-if-exists
-                                                location-description))
-        with i = 0
-        unless bad-results
-          return t
-        when (and (>= i *max-retry-count*)
-                  bad-results)
-          do (progn
-               (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Please remove USB and hold for further review.  Press Enter after USB has been removed.~%"
-                       location-description
-                       bad-results)
-               (ignore-errors (read-line))
-               (format t *waiting-message*)
-               (return nil))
-        when bad-results
-          do (progn
-               (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Trying again...~%"
-                       location-description
-                       bad-results)
-               (incf i))))
+  (let ((bad-results (nth-value 1 (funcall copy-function
+                                           from
+                                           to
+                                           skip-if-exists
+                                           location-description))))
+    (cond (bad-results
+           (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}~%Trying again...~%"
+                   location-description
+                   bad-results)
+           (let ((bad-results (nth-value 1 (copy-files bad-results
+                                                       to
+                                                       skip-if-exists
+                                                       location-description))))
+             (cond (bad-results
+                    (format t "Failed to copy following files ~@[to ~a~]:~%~{~a~%~}
+Please remove USB and hold for further review.  Press Enter after USB has been removed.~%"
+                            location-description
+                            bad-results)
+                    (ignore-errors (read-line))
+                    (format t *waiting-message*))
+                   (t t))))
+          (t t))))
 
 (defun import-from-usb (device-ids vault-path viewable-path)
   "Check USBs for relavant ones, and if one is found, copy the files
