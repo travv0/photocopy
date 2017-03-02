@@ -317,7 +317,8 @@ used for output."
                 location-description)))
 
 (defun try-copy (copy-function from to skip-if-exists &optional location-description)
-  "Attempt to use `copy-function' to copy files from `from' directory to `to' directory.
+  "Attempt to use `copy-function' to copy files from `from' directory to `to' directory.'
+If any files fail to copy, try to copy them one more time with the generic copy-files function.
 If `skip-if-exists' is T, don't copy files already in `to'.  `location-description' is just
 used for output."
   (declare (function copy-function)
