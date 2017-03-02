@@ -9,6 +9,9 @@
 
 (in-package :photocopy)
 
+(defparameter *version-number* "1.0.0"
+  "Version number of application.")
+
 (defvar *device-ids* (make-hash-table :test 'equal)
   "Hash table of badge numbers by device ID.")
 (defvar *settings* (make-hash-table :test 'equal)
@@ -37,13 +40,17 @@
   "Lock for threads")
 
 (defun -main (&optional args)
+  (format t "photocopy v~a~%~%" *version-number*)
   (let ((ini (parse (normalize-line-endings
-                     (read-ini-to-string (or (second args) "config.ini")))
-                    'list)))
+                     (read-ini-to-string (or (when (and (string/= (second args) "-d")
+                                                        (string/= (second args) "--debug"))
+                                               (second args))
+                                             "config.ini")))
+                    'list))
+        (debug (or (position "-d" args :test 'string=)
+                   (position "--debug" args :test 'string=))))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
-    (ensure-directories-exist (gethash "viewable" *settings*))
-    (ensure-directories-exist (gethash "vault" *settings*))
     (let ((check-frequency (or (parse-integer
                                 (gethash "checkFrequency" *settings*)
                                 :junk-allowed t)
@@ -55,7 +62,26 @@
           (expiration-days (or (parse-integer
                                 (gethash "expirationDays" *settings*)
                                 :junk-allowed t)
-                               *default-expiration-days*)))
+                               *default-expiration-days*))
+          (vault-path (uiop/pathname:ensure-directory-pathname
+                       (gethash "vault" *settings*)))
+          (viewable-path (uiop/pathname:ensure-directory-pathname
+                          (gethash "viewable" *settings*))))
+      (when debug
+        (format t
+                "Loaded configuration:
+vaultPath=~a
+viewablePath=~a
+checkFrequency=~d
+cleanFrequency=~d
+expirationDays=~d~%~%"
+                vault-path
+                viewable-path
+                check-frequency
+                clean-frequency
+                expiration-days))
+      (ensure-directories-exist viewable-path)
+      (ensure-directories-exist vault-path)
       (bt:make-thread
        (lambda ()
          (loop
