@@ -24,14 +24,11 @@
   "Message to show when waiting for a USB to be inserted.")
 
 (defparameter *default-expiration-days* 14
-  "Default value for expiration days when not provided in INI or if invalid
-(in days).")
+  "Default value for expiration days when not provided in INI or if invalid (in days).")
 (defparameter *default-clean-frequency* 3600
-  "Default value for clean frequency when not provided in INI or if invalid
-(in seconds).")
+  "Default value for clean frequency when not provided in INI or if invalid (in seconds).")
 (defparameter *default-check-frequency* 5
-  "Default value for check frequency when not provided in INI or if invalid
-(in seconds).")
+  "Default value for check frequency when not provided in INI or if invalid (in seconds).")
 
 (defparameter *max-retry-count* 1
   "Number of times to retry file copy, should it fail.")
