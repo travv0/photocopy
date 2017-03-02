@@ -149,7 +149,8 @@ with `section-name'."
 
 (defun ini-section-to-hash-table (section table)
   "Populate `table' hash table with keys and values from `section'."
-  (declare ((proper-list (proper-list property-list)) section))
+  (declare ((proper-list (proper-list property-list)) section)
+           (hash-table table))
   (loop for setting in section
         do (let* ((setting-plist (first setting))
                   (key (first (getf setting-plist :name)))
@@ -201,8 +202,7 @@ already in `to'.  `location-description' is just used for output."
 If `skip-if-exists' is T, will skip files already in `to'.
 `location-description' is just used for output."
   (declare (pathname from)
-           (pathname to)
-           ((or string null) location-description))
+           (pathname to))
   (handler-case
       (let ((buf-size 4096))
         (with-open-file (input-stream from
@@ -251,7 +251,7 @@ If `skip-if-exists' is T, will skip files already in `to'.
   "Get number of files in a `directory' (recursively).  If `skip-if-exists' is T,
 don't count files that are in `dest-directory'."
   (declare ((or string pathname) directory)
-           (boolean skip-if-exists))
+           ((or null pathname) dest-directory))
   (when (and skip-if-exists (not dest-directory))
     (error "dest-directory must be provided if skip-if-exists is provided."))
   (let ((counter 0))
@@ -307,8 +307,7 @@ and drive letter of the first one that's found in `serial-number-table'."
 don't copy files that are already in `destination'.  `location-description' is only
 used for output."
   (declare ((or string pathname) drive-letter)
-           ((or string pathname) destination)
-           ((or string null) location-description))
+           ((or string pathname) destination))
   (let ((destination (uiop/pathname:ensure-directory-pathname destination)))
     (ensure-directories-exist destination)
     (copy-files (format nil "~a/"
@@ -321,6 +320,9 @@ used for output."
   "Attempt to use `copy-function' to copy files from `from' directory to `to' directory.
 If `skip-if-exists' is T, don't copy files already in `to'.  `location-description' is just
 used for output."
+  (declare (function copy-function)
+           ((or pathname string) from)
+           ((or pathname string) to))
   (let ((bad-results (nth-value 1 (funcall copy-function
                                            from
                                            to
