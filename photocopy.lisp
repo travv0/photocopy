@@ -125,59 +125,39 @@ with `section-name'."
   "Copy all files from `from' to `to'."
   (declare ((or pathname string (proper-list pathname)) from)
            ((or pathname string) to))
-  (typecase from
-    ((or pathname string)
-     (let* ((from (uiop/pathname:ensure-directory-pathname from))
-            (to (uiop/pathname:ensure-directory-pathname to))
-            (total-file-count (file-count from skip-if-exists to))
-            (current-file-count 1)
-            (failed ()))
-       (ensure-directories-exist to)
-       (walk-directory from
-                       (lambda (file)
-                         (let ((new-file (merge-pathnames-as-file
-                                          to
-                                          (file-namestring file))))
-                           (unless (and skip-if-exists
-                                        (file-exists-p new-file))
-                             (format t "[~d/~d] "
-                                     current-file-count
-                                     total-file-count)
-                             (unless (copy-file-with-progress
-                                      file
-                                      new-file
-                                      location-description)
-                               (setf failed (cons file failed)))
-                             (incf current-file-count)))))
-       (if failed
-           (values nil failed)
-           t)))
-    ((proper-list pathname)
-     (let* ((to (uiop/pathname:ensure-directory-pathname to))
-            (total-file-count (length from))
-            (current-file-count 1)
-            (failed ()))
-       (ensure-directories-exist to)
-       (map nil
-            (lambda (file)
-              (let ((new-file (merge-pathnames-as-file
-                               to
-                               (file-namestring file))))
-                (unless (and skip-if-exists
-                             (file-exists-p new-file))
-                  (format t "[~d/~d] "
-                          current-file-count
-                          total-file-count)
-                  (unless (copy-file-with-progress
-                           file
-                           new-file
-                           location-description)
-                    (setf failed (cons file failed)))
-                  (incf current-file-count))))
-            from)
-       (if failed
-           (values nil failed)
-           t)))))
+  (let* ((from (if (or (pathnamep from)
+                       (stringp from))
+                   (uiop/pathname:ensure-directory-pathname from)
+                   from))
+         (to (uiop/pathname:ensure-directory-pathname to))
+         (total-file-count (if (or (pathnamep from)
+                                   (stringp from))
+                               (file-count from skip-if-exists to)
+                               (length from)))
+         (current-file-count 1)
+         (failed ()))
+    (ensure-directories-exist to)
+    (flet ((copy (file)
+             (let ((new-file (merge-pathnames-as-file
+                              to
+                              (file-namestring file))))
+               (unless (and skip-if-exists
+                            (file-exists-p new-file))
+                 (format t "[~d/~d] "
+                         current-file-count
+                         total-file-count)
+                 (unless (copy-file-with-progress
+                          file
+                          new-file
+                          location-description)
+                   (setf failed (cons file failed)))
+                 (incf current-file-count)))))
+      (typecase from
+        ((or pathname string) (walk-directory from #'copy))
+        ((proper-list pathname) (map nil #'copy from)))
+      (if failed
+          (values nil failed)
+          t))))
 
 (defun copy-file-with-progress (from to &optional location-description)
   "Copy files from `from' to `to', hopefully with a nice progress bar."
