@@ -41,12 +41,12 @@
 
 (defun -main (&optional args)
   (format t "photocopy v~a~%~%" *version-number*)
-  (let ((ini (parse (normalize-line-endings
-                     (read-ini-to-string (or (when (and (string/= (second args) "-d")
-                                                        (string/= (second args) "--debug"))
-                                               (second args))
-                                             "config.ini")))
-                    'list))
+  (let* ((ini-file (or (when (and (string/= (second args) "-d")
+                                  (string/= (second args) "--debug"))
+                         (second args))
+                       "config.ini"))
+         (ini (parse (normalize-line-endings (read-ini-to-string ini-file))
+                     'list))
         (debug (or (position "-d" args :test 'string=)
                    (position "--debug" args :test 'string=))))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
@@ -69,17 +69,26 @@
                           (gethash "viewable" *settings*))))
       (when debug
         (format t
-                "Loaded configuration:
-vaultPath=~a
-viewablePath=~a
+                "Loaded configuration as:
+vaultPath=~s
+viewablePath=~s
 checkFrequency=~d
 cleanFrequency=~d
-expirationDays=~d~%~%"
+expirationDays=~d
+
+From values in ~s:
+~s
+
+Device Mapping:
+~s~%~%"
                 vault-path
                 viewable-path
                 check-frequency
                 clean-frequency
-                expiration-days))
+                expiration-days
+                ini-file
+                *settings*
+                *device-ids*))
       (ensure-directories-exist viewable-path)
       (ensure-directories-exist vault-path)
       (bt:make-thread
@@ -101,7 +110,8 @@ expirationDays=~d~%~%"
             (*lock*)
           (import-from-usb *device-ids*
                            (gethash "vault" *settings*)
-                           (gethash "viewable" *settings*)))
+                           (gethash "viewable" *settings*)
+                           debug))
         (sleep check-frequency)))))
 
 (defmethod print-object ((object hash-table) stream)
@@ -325,12 +335,15 @@ Please remove USB and hold for further review.  Press Enter after USB has been r
                    (t t))))
           (t t))))
 
-(defun import-from-usb (device-ids vault-path viewable-path)
+(defun import-from-usb (device-ids vault-path viewable-path &optional debug)
   "Check USBs for relavant ones, and if one is found, copy the files
 from it to the necessary places."
   (declare (hash-table device-ids)
            ((or string pathname) vault-path)
            ((or string pathname) viewable-path))
+  (when debug
+    (format t "Serial numbers of connected devices:~%~s~%~%"
+            (retrieve-current-serial-numbers)))
   (let ((device (check-serial-numbers (retrieve-current-serial-numbers)
                                       device-ids))
         (vault-path (uiop/pathname:ensure-directory-pathname vault-path))
