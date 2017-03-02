@@ -9,7 +9,7 @@
 
 (in-package :photocopy)
 
-(defparameter *version-number* "1.0.0"
+(defparameter *version-number* "1.0.1"
   "Version number of application.")
 
 (defvar *device-ids* (make-hash-table :test 'equal)
