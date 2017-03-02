@@ -433,28 +433,28 @@ from it to the `vault-path' and `viewable-path'.  If `debug' is T, output extra 
              (buf2 (make-array buf-size :element-type (stream-element-type input-stream2)))
              (file-length1 (file-length input-stream1))
              (file-length2 (file-length input-stream2)))
-        (when (and file-length1
-                   file-length2
-                   (= file-length1 file-length2))
-          (loop for pos1 = (read-sequence buf1 input-stream1)
-                for pos2 = (read-sequence buf2 input-stream2)
-                with progress = 0
-                with progress-bar-size = 0
-                when (not (equalp buf1 buf2))
-                  return nil
-                when (not (plusp pos1))
+        (if (= (or file-length1 0)
+               (or file-length2 0))
+            (loop for pos1 = (read-sequence buf1 input-stream1)
+                  for pos2 = (read-sequence buf2 input-stream2)
+                  with progress = 0
+                  with progress-bar-size = 0
                   do (progn
-                       (when (< progress-bar-size *progress-bar-length*)
-                         (format t
-                                 "~v@{~A~:*~}"
-                                 (- *progress-bar-length* progress-bar-size)
-                                 "="))
-                       (return t))
-                do (progn
-                     (incf progress buf-size)
-                     (when (> (floor (* *progress-bar-length*
-                                        (/ progress file-length1)))
-                              progress-bar-size)
-                       (format t "=")
-                       (finish-output)
-                       (incf progress-bar-size)))))))))
+                       (when (or (not (equalp buf1 buf2))
+                                 (not (plusp pos1)))
+                         (when (< progress-bar-size *progress-bar-length*)
+                           (format t
+                                   "~v@{~A~:*~}"
+                                   (- *progress-bar-length* progress-bar-size)
+                                   "="))
+                         (if (not (plusp pos1))
+                             (return t)
+                             (return nil)))
+                       (incf progress buf-size)
+                       (when (> (floor (* *progress-bar-length*
+                                          (/ progress file-length1)))
+                                progress-bar-size)
+                         (format t "=")
+                         (finish-output)
+                         (incf progress-bar-size))))
+            (format t "~v@{~A~:*~}" *progress-bar-length* "="))))))
