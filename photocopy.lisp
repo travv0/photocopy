@@ -158,7 +158,8 @@ with `section-name'."
   table)
 
 (defun copy-files (from to skip-if-exists &optional location-description)
-  "Copy all files from `from' to `to'."
+  "Copy all files from `from' to `to', if `skip-if-exists' is T, will skip files
+already in `to'.  `location-description' is just used for output."
   (declare ((or pathname string (proper-list pathname)) from)
            ((or pathname string) to))
   (let* ((from (if (or (pathnamep from)
@@ -196,7 +197,9 @@ with `section-name'."
           t))))
 
 (defun copy-file-with-progress (from to &optional location-description)
-  "Copy files from `from' to `to', hopefully with a nice progress bar."
+  "Copy file from `from' to `to', hopefully with a nice progress bar.
+If `skip-if-exists' is T, will skip files already in `to'.
+`location-description' is just used for output."
   (declare (pathname from)
            (pathname to)
            ((or string null) location-description))
@@ -245,7 +248,8 @@ with `section-name'."
                       (uiop/filesystem:delete-file-if-exists to)))))
 
 (defun file-count (directory &optional skip-if-exists dest-directory)
-  "Get number of files in a `directory' (recursively)."
+  "Get number of files in a `directory' (recursively).  If `skip-if-exists' is T,
+don't count files that are in `dest-directory'."
   (declare ((or string pathname) directory)
            (boolean skip-if-exists))
   (when (and skip-if-exists (not dest-directory))
@@ -299,7 +303,9 @@ and drive letter of the first one that's found in `serial-number-table'."
                            :drive-letter drive-letter)))))
 
 (defun copy-files-from-device (drive-letter destination skip-if-exists &optional location-description)
-  "Copy all files from `drive-letter' to `destination'."
+  "Copy all files from `drive-letter' to `destination'.  If `skip-if-exists' is T,
+don't copy files that are already in `destination'.  `location-description' is only
+used for output."
   (declare ((or string pathname) drive-letter)
            ((or string pathname) destination)
            ((or string null) location-description))
@@ -312,6 +318,9 @@ and drive letter of the first one that's found in `serial-number-table'."
                 location-description)))
 
 (defun try-copy (copy-function from to skip-if-exists &optional location-description)
+  "Attempt to use `copy-function' to copy files from `from' directory to `to' directory.
+If `skip-if-exists' is T, don't copy files already in `to'.  `location-description' is just
+used for output."
   (let ((bad-results (nth-value 1 (funcall copy-function
                                            from
                                            to
@@ -336,8 +345,8 @@ Please remove USB and hold for further review.  Press Enter after USB has been r
           (t t))))
 
 (defun import-from-usb (device-ids vault-path viewable-path &optional debug)
-  "Check USBs for relavant ones, and if one is found, copy the files
-from it to the necessary places."
+  "Check connected USBs for matching ones in `device-ids', and if one is found, copy the files
+from it to the `vault-path' and `viewable-path'.  If `debug' is T, output extra information."
   (declare (hash-table device-ids)
            ((or string pathname) vault-path)
            ((or string pathname) viewable-path))
