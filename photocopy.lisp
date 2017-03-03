@@ -445,7 +445,9 @@ from it to the `vault-path' and `viewable-path'.  If `debug' is T, output extra 
              (buf2 (make-array buf-size :element-type (stream-element-type input-stream2)))
              (file-length1 (file-length input-stream1))
              (file-length2 (file-length input-stream2)))
-        (if (= file-length1 file-length2)
+        (if (and (integerp file-length1)
+                 (integerp file-length2)
+                 (= file-length1 file-length2))
             (loop for pos1 = (read-sequence buf1 input-stream1)
                   for pos2 = (read-sequence buf2 input-stream2)
                   with progress = 0
