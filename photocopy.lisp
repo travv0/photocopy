@@ -33,6 +33,9 @@
 (defparameter *max-retry-count* 1
   "Number of times to retry file copy, should it fail.")
 
+(defvar *ignore-file-list* ()
+  "Files to ignore on USB.  Don't copy these files, or delete them.")
+
 (defvar *lock* (bt:make-lock)
   "Lock for threads")
 
@@ -48,6 +51,8 @@
                    (position "--debug" args :test 'string=))))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
+    (setf *ignore-file-list*
+          (split-sequence #\, (gethash "ignoreFileList" *settings*)))
     (let ((check-frequency (or (parse-integer
                                 (gethash "checkFrequency" *settings*)
                                 :junk-allowed t)
@@ -72,6 +77,7 @@ viewablePath=~s
 checkFrequency=~d
 cleanFrequency=~d
 expirationDays=~d
+ignoreFileList=~s
 
 From values in ~s:
 ~s
@@ -83,6 +89,7 @@ Device Mapping:
                 check-frequency
                 clean-frequency
                 expiration-days
+                *ignore-file-list*
                 ini-file
                 *settings*
                 *device-ids*))
@@ -176,8 +183,11 @@ already in `to'.  `location-description' is just used for output."
              (let ((new-file (merge-pathnames-as-file
                               to
                               (file-namestring file))))
-               (unless (and skip-if-exists
-                            (file-exists-p new-file))
+               (unless (or (and skip-if-exists
+                                (file-exists-p new-file))
+                           (position (file-namestring file)
+                                     *ignore-file-list*
+                                     :test 'string-equal))
                  (format t "[~d/~d] "
                          current-file-count
                          total-file-count)
@@ -254,10 +264,13 @@ don't count files that are in `dest-directory'."
     (walk-directory (format nil "~a/" directory)
                     (lambda (file)
                       (declare (ignorable file))
-                      (unless (and skip-if-exists
-                                   (probe-file (merge-pathnames-as-file
-                                                (uiop/pathname:ensure-directory-pathname dest-directory)
-                                                (file-namestring file))))
+                      (unless (or (and skip-if-exists
+                                       (probe-file (merge-pathnames-as-file
+                                                    (uiop/pathname:ensure-directory-pathname dest-directory)
+                                                    (file-namestring file))))
+                                  (position (file-namestring file)
+                                            *ignore-file-list*
+                                            :test 'string-equal))
                         (incf counter))))
     counter))
 
@@ -379,7 +392,10 @@ from it to the `vault-path' and `viewable-path'.  If `debug' is T, output extra 
         (cl-fad:walk-directory
          (format nil "~a/" (getf device :drive-letter))
          (lambda (file)
-           (uiop/filesystem:delete-file-if-exists file)))
+           (unless (position (file-namestring file)
+                             *ignore-file-list*
+                             :test 'string-equal)
+             (uiop/filesystem:delete-file-if-exists file))))
         (format t "Complete, please remove USB and press Enter.~%")
         (ignore-errors (read-line))
         (format t *waiting-message*)))))
@@ -429,8 +445,7 @@ from it to the `vault-path' and `viewable-path'.  If `debug' is T, output extra 
              (buf2 (make-array buf-size :element-type (stream-element-type input-stream2)))
              (file-length1 (file-length input-stream1))
              (file-length2 (file-length input-stream2)))
-        (if (= (or file-length1 0)
-               (or file-length2 0))
+        (if (= file-length1 file-length2)
             (loop for pos1 = (read-sequence buf1 input-stream1)
                   for pos2 = (read-sequence buf2 input-stream2)
                   with progress = 0
