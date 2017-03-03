@@ -196,7 +196,6 @@ already in `to'.  `location-description' is just used for output."
 
 (defun copy-file-with-progress (from to &optional location-description)
   "Copy file from `from' to `to', hopefully with a nice progress bar.
-If `skip-if-exists' is T, will skip files already in `to'.
 `location-description' is just used for output."
   (declare (pathname from)
            (pathname to))
