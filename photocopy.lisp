@@ -70,8 +70,28 @@
           (viewable-path (uiop/pathname:ensure-directory-pathname
                           (gethash "viewable" *settings*))))
       (when debug
-        (format t
-                "Loaded configuration as:
+        (print-debug-config vault-path
+                            viewable-path
+                            check-frequency
+                            clean-frequency
+                            expiration-days
+                            *ignore-file-list*
+                            ini-file
+                            *settings*
+                            *device-ids*))
+      (ensure-directories-exist viewable-path)
+      (ensure-directories-exist vault-path)
+      (cleaning-loop expiration-days clean-frequency)
+      (bt:with-lock-held
+          (*lock*)
+        (format t *waiting-message*))
+      (copy-loop check-frequency debug))))
+
+(defun print-debug-config (vault-path viewable-path check-frequency clean-frequency
+                           expiration-days ignore-file-list ini-file settings device-ids)
+  "Print debug information relating to the configuration file."
+  (format t
+          "Loaded configuration as:
 vaultPath=~s
 viewablePath=~s
 checkFrequency=~d
@@ -84,39 +104,42 @@ From values in ~s:
 
 Device Mapping:
 ~s~%~%"
-                vault-path
-                viewable-path
-                check-frequency
-                clean-frequency
-                expiration-days
-                *ignore-file-list*
-                ini-file
-                *settings*
-                *device-ids*))
-      (ensure-directories-exist viewable-path)
-      (ensure-directories-exist vault-path)
-      (bt:make-thread
-       (lambda ()
-         (loop
-           (bt:with-lock-held
-               (*lock*)
-             (format t "Deleting files more than ~d days old from viewable directory...~%"
-                     expiration-days)
-             (clean-old-files expiration-days
-                              (gethash "viewable" *settings*)))
-           (sleep clean-frequency)))
-       :name "clean-files")
-      (bt:with-lock-held
-          (*lock*)
-        (format t *waiting-message*))
-      (loop
-        (bt:with-lock-held
-            (*lock*)
-          (import-from-usb *device-ids*
-                           (gethash "vault" *settings*)
-                           (gethash "viewable" *settings*)
-                           debug))
-        (sleep check-frequency)))))
+          vault-path
+          viewable-path
+          check-frequency
+          clean-frequency
+          expiration-days
+          ignore-file-list
+          ini-file
+          settings
+          device-ids))
+
+(defun cleaning-loop (expiration-days clean-frequency)
+  "Spawn a new thread that deletes files older than `expiration-days' every `clean-frequency'
+seconds."
+  (bt:make-thread
+   (lambda ()
+     (loop
+       (bt:with-lock-held
+           (*lock*)
+         (format t "Deleting files more than ~d days old from viewable directory...~%"
+                 expiration-days)
+         (clean-old-files expiration-days
+                          (gethash "viewable" *settings*)))
+       (sleep clean-frequency)))
+   :name "clean-files"))
+
+(defun copy-loop (check-frequency debug)
+  "Checks for USB every `check-frequency' seconds and if found, copies all files from it to
+vault and viewables folders.  If `debug' is T, print debug info."
+  (loop
+    (bt:with-lock-held
+        (*lock*)
+      (import-from-usb *device-ids*
+                       (gethash "vault" *settings*)
+                       (gethash "viewable" *settings*)
+                       debug))
+    (sleep check-frequency)))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{~s ~s~}~^,~%      ~}}"
