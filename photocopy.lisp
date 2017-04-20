@@ -9,7 +9,7 @@
 
 (in-package :photocopy)
 
-(defparameter *version-number* "1.1.1"
+(defparameter *version-number* "1.1.2"
   "Version number of application.")
 
 (defvar *device-ids* (make-hash-table :test 'equal)
@@ -47,8 +47,8 @@
                        "config.ini"))
          (ini (parse (normalize-line-endings (read-ini-to-string ini-file))
                      'list))
-        (debug (or (position "-d" args :test 'string=)
-                   (position "--debug" args :test 'string=))))
+         (debug (or (position "-d" args :test 'string=)
+                    (position "--debug" args :test 'string=))))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
     (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
     (setf *ignore-file-list*
@@ -294,18 +294,24 @@ don't count files that are in `dest-directory'."
                             '("logicaldisk" "get" "caption,volumeserialnumber")
                             :search t
                             :output s))))
-    (rest (rest (cl-utilities:split-sequence-if
+    (the (proper-list (proper-list string))
+         (map 'list
+              (lambda (s)
+                (cl-utilities:split-sequence-if
                  #'whitespacep
-                 (trim-whitespace command-results)
-                 :remove-empty-subseqs t)))))
+                 s
+                 :remove-empty-subseqs t))
+              (rest (cl-utilities:split-sequence
+                     #\Newline
+                     (trim-whitespace command-results)
+                     :remove-empty-subseqs t))))))
 
 (defun check-serial-numbers (serial-number-list serial-number-table)
   "Checks serial numbers in `serial-number-list' and returns the badge number
 and drive letter of the first one that's found in `serial-number-table'."
   (declare ((proper-list string) serial-number-list)
            (hash-table serial-number-table))
-  (loop for drive-letter in serial-number-list by #'cddr
-        for serial-number in (rest serial-number-list) by #'cddr
+  (loop for (drive-letter serial-number) in serial-number-list by #'cdr
         do (when (nth-value 1 (gethash serial-number serial-number-table))
              (return (list :badge-number (gethash serial-number
                                                   serial-number-table)
