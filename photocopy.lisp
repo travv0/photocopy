@@ -9,7 +9,7 @@
 
 (in-package :photocopy)
 
-(defparameter *version-number* "1.1.2"
+(defparameter *version-number* "1.1.3"
   "Version number of application.")
 
 (defvar *device-ids* (make-hash-table :test 'equal)
@@ -45,8 +45,13 @@
                                   (string/= (second args) "--debug"))
                          (second args))
                        "config.ini"))
-         (ini (parse (normalize-line-endings (read-ini-to-string ini-file))
-                     'list))
+         (ini (cond ((file-exists-p ini-file)
+                     (parse (normalize-line-endings (read-ini-to-string ini-file))
+                            'list))
+                    (t (format t "Could not open config file ~a~%Press enter to exit...~%"
+                               ini-file)
+                       (read-line)
+                       (return-from -main))))
          (debug (or (position "-d" args :test 'string=)
                     (position "--debug" args :test 'string=))))
     (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
