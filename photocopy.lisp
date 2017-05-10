@@ -48,7 +48,8 @@
          (ini (cond ((file-exists-p ini-file)
                      (parse (normalize-line-endings (read-ini-to-string ini-file))
                             'list))
-                    (t (format t "Could not open config file ~a~%Press enter to exit...~%"
+                    (t (format t "Could not open config file ~a: File not found
+Press enter to exit...~%"
                                ini-file)
                        (read-line)
                        (return-from -main))))
