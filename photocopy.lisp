@@ -9,7 +9,7 @@
 
 (in-package :photocopy)
 
-(defparameter *version-number* "1.1.3"
+(defparameter *version-number* "1.1.4"
   "Version number of application.")
 
 (defvar *device-ids* (make-hash-table :test 'equal)
@@ -41,57 +41,61 @@
 
 (defun -main (&optional args)
   (format t "photocopy v~a~%~%" *version-number*)
-  (let* ((ini-file (or (when (and (string/= (second args) "-d")
-                                  (string/= (second args) "--debug"))
-                         (second args))
-                       "config.ini"))
-         (ini (cond ((file-exists-p ini-file)
-                     (parse (normalize-line-endings (read-ini-to-string ini-file))
-                            'list))
-                    (t (format t "Could not open config file \"~a\": File not found
+  (handler-case
+      (let* ((ini-file (or (when (and (string/= (second args) "-d")
+                                      (string/= (second args) "--debug"))
+                             (second args))
+                           "config.ini"))
+             (ini (cond ((file-exists-p ini-file)
+                         (parse (normalize-line-endings (read-ini-to-string ini-file))
+                                'list))
+                        (t (format t "Could not open config file \"~a\": File not found
 Press enter to exit...~%"
-                               ini-file)
-                       (read-line)
-                       (return-from -main))))
-         (debug (or (position "-d" args :test 'string=)
-                    (position "--debug" args :test 'string=))))
-    (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
-    (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
-    (setf *ignore-file-list*
-          (split-sequence #\, (gethash "ignoreFileList" *settings*)))
-    (let ((check-frequency (or (parse-integer
-                                (gethash "checkFrequency" *settings*)
-                                :junk-allowed t)
-                               *default-check-frequency*))
-          (clean-frequency (or (parse-integer
-                                (gethash "cleanFrequency" *settings*)
-                                :junk-allowed t)
-                               *default-clean-frequency*))
-          (expiration-days (or (parse-integer
-                                (gethash "expirationDays" *settings*)
-                                :junk-allowed t)
-                               *default-expiration-days*))
-          (vault-path (uiop/pathname:ensure-directory-pathname
-                       (gethash "vault" *settings*)))
-          (viewable-path (uiop/pathname:ensure-directory-pathname
-                          (gethash "viewable" *settings*))))
-      (when debug
-        (print-debug-config vault-path
-                            viewable-path
-                            check-frequency
-                            clean-frequency
-                            expiration-days
-                            *ignore-file-list*
-                            ini-file
-                            *settings*
-                            *device-ids*))
-      (ensure-directories-exist viewable-path)
-      (ensure-directories-exist vault-path)
-      (cleaning-loop expiration-days clean-frequency)
-      (bt:with-lock-held
-          (*lock*)
-        (format t *waiting-message*))
-      (copy-loop check-frequency debug))))
+                                   ini-file)
+                           (read-line)
+                           (return-from -main))))
+             (debug (or (position "-d" args :test 'string=)
+                        (position "--debug" args :test 'string=))))
+        (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
+        (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
+        (setf *ignore-file-list*
+              (split-sequence #\, (gethash "ignoreFileList" *settings*)))
+        (let ((check-frequency (or (parse-integer
+                                    (gethash "checkFrequency" *settings*)
+                                    :junk-allowed t)
+                                   *default-check-frequency*))
+              (clean-frequency (or (parse-integer
+                                    (gethash "cleanFrequency" *settings*)
+                                    :junk-allowed t)
+                                   *default-clean-frequency*))
+              (expiration-days (or (parse-integer
+                                    (gethash "expirationDays" *settings*)
+                                    :junk-allowed t)
+                                   *default-expiration-days*))
+              (vault-path (uiop/pathname:ensure-directory-pathname
+                           (gethash "vault" *settings*)))
+              (viewable-path (uiop/pathname:ensure-directory-pathname
+                              (gethash "viewable" *settings*))))
+          (when debug
+            (print-debug-config vault-path
+                                viewable-path
+                                check-frequency
+                                clean-frequency
+                                expiration-days
+                                *ignore-file-list*
+                                ini-file
+                                *settings*
+                                *device-ids*))
+          (ensure-directories-exist viewable-path)
+          (ensure-directories-exist vault-path)
+          (cleaning-loop expiration-days clean-frequency)
+          (bt:with-lock-held
+              (*lock*)
+            (format t *waiting-message*))
+          (copy-loop check-frequency debug)))
+    (error (c) (progn (format t "~a~%~%Press enter to exit...~%" c)
+                      (read-line)
+                      (return-from -main)))))
 
 (defun print-debug-config (vault-path viewable-path check-frequency clean-frequency
                            expiration-days ignore-file-list ini-file settings device-ids)
