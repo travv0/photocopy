@@ -56,7 +56,7 @@ Press enter to exit...~%"
                            (return-from -main))))
              (debug (or (position "-d" args :test 'string=)
                         (position "--debug" args :test 'string=))))
-        (ini-section-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
+        (ini-badges-to-hash-table (get-ini-section ini "DEVICE-BADGE") *device-ids*)
         (ini-section-to-hash-table (get-ini-section ini "GENERAL") *settings*)
         (setf *ignore-file-list*
               (split-sequence #\, (gethash "ignoreFileList" *settings*)))
@@ -193,6 +193,20 @@ with `section-name'."
                   (key (first (getf setting-plist :name)))
                   (value (getf setting-plist :value)))
              (setf (gethash key table) value)))
+  table)
+
+(defun ini-badges-to-hash-table (section table)
+  "Populate `table' hash table with contents from `section', with keys being comma
+separated values on the right and values being the badge numbers on the left."
+  (declare ((proper-list (proper-list property-list)) section)
+           (hash-table table))
+  (loop for setting in section
+        do (let* ((setting-plist (first setting))
+                  (badge-number (first (getf setting-plist :name)))
+                  (value (getf setting-plist :value))
+                  (device-ids (split-sequence #\, value)))
+             (loop for device-id in device-ids
+                   do (setf (gethash device-id table) badge-number))))
   table)
 
 (defun copy-files (from to skip-if-exists &optional location-description)
